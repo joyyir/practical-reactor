@@ -1,4 +1,4 @@
-import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.Sinks;
@@ -24,6 +24,7 @@ import java.util.List;
  *
  * @author Stefan Dragisic
  */
+// TODO : jyjang - Sink는 생소한 개념이어서 나중에 다 다시 풀어보자.
 public class c8_Sinks extends SinksBase {
 
     /**
@@ -33,11 +34,14 @@ public class c8_Sinks extends SinksBase {
      */
     @Test
     public void single_shooter() {
-        //todo: feel free to change code as you need
-        Mono<Boolean> operationCompleted = null;
+        // TODO : jyjang - legacy 시스템에 Reactive API를 적용하려면 전반적으로 로직을 수정해야하는데
+        // 그럴 경우 변경이 커지기 때문에 공수가 많이 들고 버그가 생길 가능성이 크다.
+        // Sink를 사용하면 기존 로직에 큰 변경 없이 Reactive Stream를 생성할 수 있을 것 같다.
+        Sinks.One<Boolean> sink = Sinks.one();
+        Mono<Boolean> operationCompleted = sink.asMono();
         submitOperation(() -> {
-
             doSomeWork(); //don't change this line
+            sink.tryEmitValue(true);
         });
 
         //don't change code below
@@ -54,11 +58,17 @@ public class c8_Sinks extends SinksBase {
      */
     @Test
     public void single_subscriber() {
-        //todo: feel free to change code as you need
-        Flux<Integer> measurements = null;
+        Sinks.Many<Integer> sink = Sinks.many()
+                                        .unicast() // TODO : jyjang - allows single subscriber
+                                        .onBackpressureBuffer();
+        Flux<Integer> measurements = sink.asFlux();
         submitOperation(() -> {
 
             List<Integer> measures_readings = get_measures_readings(); //don't change this line
+            for (Integer measures : measures_readings) {
+                sink.tryEmitNext(measures);
+            }
+            sink.tryEmitComplete();
         });
 
         //don't change code below
@@ -74,11 +84,17 @@ public class c8_Sinks extends SinksBase {
      */
     @Test
     public void it_gets_crowded() {
-        //todo: feel free to change code as you need
-        Flux<Integer> measurements = null;
+        Sinks.Many<Integer> sink = Sinks.many()
+                                        .multicast() // TODO : jyjang - allows multiple subscribers
+                                        .onBackpressureBuffer();
+        Flux<Integer> measurements = sink.asFlux();
         submitOperation(() -> {
 
             List<Integer> measures_readings = get_measures_readings(); //don't change this line
+            for (Integer measures : measures_readings) {
+                sink.tryEmitNext(measures);
+            }
+            sink.tryEmitComplete();
         });
 
         //don't change code below
@@ -97,8 +113,7 @@ public class c8_Sinks extends SinksBase {
      */
     @Test
     public void open_24_7() {
-        //todo: set autoCancel parameter to prevent sink from closing
-        Sinks.Many<Integer> sink = Sinks.many().multicast().onBackpressureBuffer();
+        Sinks.Many<Integer> sink = Sinks.many().multicast().onBackpressureBuffer(100, false);
         Flux<Integer> flux = sink.asFlux();
 
         //don't change code below
@@ -139,8 +154,7 @@ public class c8_Sinks extends SinksBase {
      */
     @Test
     public void blue_jeans() {
-        //todo: enable autoCancel parameter to prevent sink from closing
-        Sinks.Many<Integer> sink = Sinks.many().multicast().onBackpressureBuffer();
+        Sinks.Many<Integer> sink = Sinks.many().replay().all();
         Flux<Integer> flux = sink.asFlux();
 
         //don't change code below
@@ -187,7 +201,7 @@ public class c8_Sinks extends SinksBase {
 
         for (int i = 1; i <= 50; i++) {
             int finalI = i;
-            new Thread(() -> sink.tryEmitNext(finalI)).start();
+            new Thread(() -> sink.emitNext(finalI, (signalType, emitResult) -> emitResult.equals(Sinks.EmitResult.FAIL_NON_SERIALIZED))).start();
         }
 
         //don't change code below
